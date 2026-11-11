@@ -5,6 +5,7 @@
 #include "actions/RectSelectAction.h"
 #include "actions/ThreePointAlignAction.h"
 #include "actions/GizmoAction.h"
+#include "actions/VolumeSelectAction.h"
 
 void SplatEditor::setAction(shared_ptr<InputAction> action){
 	auto editor = SplatEditor::instance;
@@ -48,7 +49,11 @@ void SplatEditor::inputHandlingDesktop(){
 		// int key_z = glfwGetKeyScancode(GLFW_KEY_Z);
 		// println("y: {}, z: {}", key_y, key_z);
 
-		if(Runtime::getKeyAction('t') == GLFW_PRESS){
+		auto volumeAction = dynamic_pointer_cast<VolumeSelectAction>(state.currentAction);
+
+		if(volumeAction && volumeAction->handleShortcuts()){
+			// consumed by the volume selection tool
+		}else if(Runtime::getKeyAction('t') == GLFW_PRESS){
 			shared_ptr<GizmoAction> action = make_shared<GizmoAction>();
 			action->mode = GizmoAction::GIZMO_TRANSLATE;
 			setAction(action);
@@ -74,6 +79,16 @@ void SplatEditor::inputHandlingDesktop(){
 			shared_ptr<BrushSelectAction> action = make_shared<BrushSelectAction>();
 			setAction(action);
 			settings.brush.mode = BRUSHMODE::ERASE;
+		}else if(Runtime::getKeyAction('v') == GLFW_PRESS){
+			// toggle the volume selection tool
+			if(volumeAction){
+				setAction(nullptr);
+			}else{
+				setAction(make_shared<VolumeSelectAction>());
+			}
+		}else if(Runtime::getKeyAction(256) == GLFW_PRESS){
+			// "esc" key: end the current tool
+			setAction(nullptr);
 		}else if(Runtime::getKeyAction('3') == GLFW_PRESS){
 			
 		}else if(Runtime::getKeyAction(261) == GLFW_PRESS){
@@ -178,7 +193,28 @@ void SplatEditor::inputHandlingDesktop(){
 	if(Runtime::mouseEvents.isLeftDownEvent()) isLeftDown = true;
 	if(Runtime::mouseEvents.isLeftUpEvent()) isLeftDown = false;
 
-	if(state.currentAction){
+	if(state.currentAction && state.currentAction->allowsNavigation()){
+		// Tools with gizmos: the camera can still be navigated. 
+		// A right click without moving ends the tool, a right drag pans.
+		static bool leftPressStartedOnGizmo = false;
+		if(Runtime::mouseEvents.isLeftDownEvent()) leftPressStartedOnGizmo = ImGuizmo::IsOver() || ImGuizmo::IsUsing() || state.currentAction->capturesLeftPress();
+		if(!Runtime::mouseEvents.isLeftDown) leftPressStartedOnGizmo = false;
+
+		if(isRightClicked){
+			setAction(nullptr);
+		}else{
+			state.currentAction->update();
+
+			bool gizmoBusy = ImGuizmo::IsUsing() || leftPressStartedOnGizmo;
+			if(gizmoBusy){
+				Runtime::controls->mousePos = {Runtime::mouseEvents.pos_x, Runtime::mouseEvents.pos_y};
+			}else{
+				Runtime::controls->onMouseMove(Runtime::mouseEvents.pos_x, Runtime::mouseEvents.pos_y);
+				Runtime::controls->onMouseScroll(Runtime::mouseEvents.wheel_x, Runtime::mouseEvents.wheel_y);
+				Runtime::controls->update();
+			}
+		}
+	}else if(state.currentAction){
 		if(Runtime::mouseEvents.isRightDown){
 			setAction(nullptr);
 
@@ -199,6 +235,13 @@ void SplatEditor::inputHandlingDesktop(){
 		// OPEN CONTEXT MENU
 		println("open context menu");
 		settings.openContextMenu = true;
+	}
+
+	// An action may request a switch to another action (e.g. volume copy -> gizmo on the new layer)
+	if(state.currentAction && state.currentAction->nextAction){
+		shared_ptr<InputAction> next = state.currentAction->nextAction;
+		state.currentAction->nextAction = nullptr;
+		setAction(next);
 	}
 
 	GLRenderer::camera->view = inverse(Runtime::controls->world);

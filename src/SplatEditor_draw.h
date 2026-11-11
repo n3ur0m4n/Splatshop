@@ -1629,4 +1629,24 @@ void SplatEditor::draw(Scene* scene, vector<RenderTarget> targets){
 	}else if(settings.splatRenderer == SPLATRENDERER_PERSPECTIVE_CORRECT){
 		drawsplats_perspectiveCorrect_concurrent(scene, concurrentTargets);
 	}
+
+	{ // SELECTION VOLUMES - translucent overlay on top of the splats
+		vector<VolumeGPU> volumes = VolumeSelectAction::getRenderVolumes();
+
+		if(volumes.size() > 0){
+			cuCtxSynchronize();
+
+			CUdeviceptr cptr_volumes = VolumeSelectAction::uploadVolumes(volumes);
+			int numVolumes = volumes.size();
+
+			for(ConcurrentTarget& concurrent : concurrentTargets){
+				RenderTarget target = concurrent.target;
+				mat4 invView = inverse(target.view);
+
+				prog_helpers->launch("kernel_drawVolumes", {&launchArgs, &target, &invView, &cptr_volumes, &numVolumes}, target.width * target.height);
+			}
+
+			cuCtxSynchronize();
+		}
+	}
 }

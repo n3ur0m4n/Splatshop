@@ -40,9 +40,8 @@ static void key_callback(GLFWwindow* window, int key, int scancode, int action, 
 		return;
 	}
 
-	if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
-		glfwSetWindowShouldClose(window, GLFW_TRUE);
-	}
+	// Esc non chiude più l'applicazione (segnalato in issue #8: si perdeva il lavoro non salvato).
+	// Per uscire usare la X della finestra.
 
 	// const char* keyname = glfwGetKeyName(key, scancode);
 	// println("keyname: {}", keyname);

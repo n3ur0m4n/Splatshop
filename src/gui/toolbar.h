@@ -3,6 +3,7 @@
 #include "actions/SphereSelectAction.h"
 #include "actions/SpherePaintAction.h"
 #include "actions/RectSelectAction.h"
+#include "actions/VolumeSelectAction.h"
 #include "actions/ThreePointAlignAction.h"
 #include "actions/GizmoAction.h"
 
@@ -323,6 +324,31 @@ void SplatEditor::makeToolbar(){
 				}
 				if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)){
 					ImGui::SetTooltip("Selection Tool (Shortcut: 4)\nAlt: Deselect\nShift: Add to selection.");
+				}
+			}
+
+			{ // SELECT - VOLUME (box / sphere / cylinder)
+				ImGui::SameLine();
+				ImGui::SetCursorPosX(cx + 4 * (buttonSize.x + padding));
+				ImVec2 fp = ImGui::GetStyle().FramePadding;
+				bool volumeActive = dynamic_pointer_cast<VolumeSelectAction>(editor->state.currentAction) != nullptr;
+				if(volumeActive){
+					ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
+				}
+				bool volumeClicked = ImGui::Button("Vol##tool_volume_select", ImVec2(buttonSize.x + 2.0f * fp.x, buttonSize.y + 2.0f * fp.y));
+				if(volumeActive){
+					ImGui::PopStyleColor();
+				}
+				if(volumeClicked){
+					// toggle: second click turns the tool off
+					if(volumeActive){
+						editor->setAction(nullptr);
+					}else{
+						editor->setAction(make_shared<VolumeSelectAction>());
+					}
+				}
+				if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled)){
+					ImGui::SetTooltip("Volume di selezione (v)\nBox / sfera / cilindro posizionabile, ruotabile e scalabile:\nseleziona, elimina, copia o sposta il contenuto in un nuovo layer.");
 				}
 			}
 

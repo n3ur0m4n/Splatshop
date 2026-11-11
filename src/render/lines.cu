@@ -153,10 +153,10 @@ void kernel_drawLines(CommonLaunchArgs args, RenderTarget target, Line* lines, u
 			(end_ndc.y * 0.5f + 0.5f) * target.height,
 		};
 
-		if(start_ndc.x < -1.0f && end_ndc.x < -1.0f) return;
-		if(start_ndc.x >  1.0f && end_ndc.x >  1.0f) return;
-		if(start_ndc.y < -1.0f && end_ndc.y < -1.0f) return;
-		if(start_ndc.y >  1.0f && end_ndc.y >  1.0f) return;
+		if(start_ndc.x < -1.0f && end_ndc.x < -1.0f) continue; // was "return", which stopped this block from drawing all remaining lines
+		if(start_ndc.x >  1.0f && end_ndc.x >  1.0f) continue; // was "return", which stopped this block from drawing all remaining lines
+		if(start_ndc.y < -1.0f && end_ndc.y < -1.0f) continue; // was "return", which stopped this block from drawing all remaining lines
+		if(start_ndc.y >  1.0f && end_ndc.y >  1.0f) continue; // was "return", which stopped this block from drawing all remaining lines
 
 		// if(sh_blockLineOffset == 0 && block.thread_rank() == 0){
 		// 	printf("%.1f, %.1f to %.1f, %.1f  \n", start_screen.x, start_screen.y, end_screen.x, end_screen.y);

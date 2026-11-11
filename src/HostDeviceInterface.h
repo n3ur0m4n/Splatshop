@@ -322,6 +322,94 @@ struct TriangleModelQueue{
 	TriangleMaterial* materials;
 };
 
+// Selection volumes (box / sphere / cylinder), see actions/VolumeSelectAction.h
+// The unit shapes are: box [-1, 1]^3, sphere of radius 1, cylinder along z with radius 1 and z in [-1, 1].
+// <volumeToWorld> transforms the unit shape into the world.
+constexpr int VOLUME_SHAPE_BOX      = 0;
+constexpr int VOLUME_SHAPE_SPHERE   = 1;
+constexpr int VOLUME_SHAPE_CYLINDER = 2;
+
+constexpr int VOLUME_OP_PREVIEW        = 0;
+constexpr int VOLUME_OP_SELECT_ADD     = 1;
+constexpr int VOLUME_OP_SELECT_REMOVE  = 2;
+constexpr int VOLUME_OP_SELECT_REPLACE = 3;
+constexpr int VOLUME_OP_DELETE         = 4;
+
+struct VolumeGPU{
+	mat4 worldToVolume;
+	int shape;
+	uint32_t color;       // ABGR
+	float fillAlpha;      // opacity of each visible face
+};
+
+inline bool isInsideUnitVolume(int shape, vec3 p){
+	if(shape == VOLUME_SHAPE_BOX){
+		return fabsf(p.x) <= 1.0f && fabsf(p.y) <= 1.0f && fabsf(p.z) <= 1.0f;
+	}else if(shape == VOLUME_SHAPE_SPHERE){
+		return glm::dot(p, p) <= 1.0f;
+	}else if(shape == VOLUME_SHAPE_CYLINDER){
+		return (p.x * p.x + p.y * p.y) <= 1.0f && fabsf(p.z) <= 1.0f;
+	}
+	return false;
+}
+
+// Intersects the ray o + t * d with the unit shape. Returns true and the interval [t0, t1] if hit.
+inline bool intersectUnitVolume(int shape, vec3 o, vec3 d, float& t0, float& t1){
+
+	auto slab = [](float o, float d, float& tmin, float& tmax) -> bool {
+		if(fabsf(d) < 1e-12f){
+			return fabsf(o) <= 1.0f;
+		}
+		float ta = (-1.0f - o) / d;
+		float tb = ( 1.0f - o) / d;
+		if(ta > tb){ float tmp = ta; ta = tb; tb = tmp; }
+		tmin = fmaxf(tmin, ta);
+		tmax = fminf(tmax, tb);
+		return tmin <= tmax;
+	};
+
+	float tmin = -1e30f;
+	float tmax =  1e30f;
+
+	if(shape == VOLUME_SHAPE_BOX){
+		if(!slab(o.x, d.x, tmin, tmax)) return false;
+		if(!slab(o.y, d.y, tmin, tmax)) return false;
+		if(!slab(o.z, d.z, tmin, tmax)) return false;
+	}else if(shape == VOLUME_SHAPE_SPHERE){
+		float a = glm::dot(d, d);
+		float b = glm::dot(o, d);
+		float c = glm::dot(o, o) - 1.0f;
+		float disc = b * b - a * c;
+		if(disc < 0.0f || a < 1e-20f) return false;
+		float s = sqrtf(disc);
+		tmin = (-b - s) / a;
+		tmax = (-b + s) / a;
+	}else if(shape == VOLUME_SHAPE_CYLINDER){
+		float a = d.x * d.x + d.y * d.y;
+		float b = o.x * d.x + o.y * d.y;
+		float c = o.x * o.x + o.y * o.y - 1.0f;
+		if(a < 1e-20f){
+			if(c > 0.0f) return false;
+		}else{
+			float disc = b * b - a * c;
+			if(disc < 0.0f) return false;
+			float s = sqrtf(disc);
+			tmin = (-b - s) / a;
+			tmax = (-b + s) / a;
+		}
+		if(!slab(o.z, d.z, tmin, tmax)) return false;
+	}else{
+		return false;
+	}
+
+	if(tmax < 0.0f) return false;
+
+	t0 = tmin;
+	t1 = tmax;
+
+	return true;
+}
+
 struct Line{
 	vec3 start;
 	vec3 end;

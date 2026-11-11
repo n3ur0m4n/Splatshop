@@ -2163,3 +2163,72 @@ void kernel_memset_u64(uint64_t* data, uint64_t value, uint64_t count){
 	
 	data[index] = value;
 }
+
+
+// Volume selection (box / sphere / cylinder), see actions/VolumeSelectAction.h
+// A splat is "inside" if its center is inside any of the given volumes. <invert> flips that.
+extern "C" __global__
+void kernel_volume_op(
+	GaussianData model,
+	VolumeGPU* volumes,
+	int numVolumes,
+	int invert,
+	int op,
+	uint32_t* changedmask
+){
+	int index = cg::this_grid().thread_rank();
+
+	if(index >= model.count) return;
+
+	uint32_t flags = model.flags[index];
+
+	if(flags & FLAGS_DELETED) return;
+
+	vec3 pos = model.position[index];
+	vec4 worldPos = model.transform * vec4(pos.x, pos.y, pos.z, 1.0f);
+
+	bool inside = false;
+	for(int i = 0; i < numVolumes; i++){
+		vec3 p = vec3(volumes[i].worldToVolume * worldPos);
+		if(isInsideUnitVolume(volumes[i].shape, p)){
+			inside = true;
+			break;
+		}
+	}
+
+	if(invert) inside = !inside;
+
+	uint32_t newFlags = flags;
+
+	if(op == VOLUME_OP_PREVIEW){
+		if(inside){
+			newFlags = newFlags | FLAGS_HIGHLIGHTED;
+		}else{
+			newFlags = newFlags & ~FLAGS_HIGHLIGHTED;
+		}
+	}else if(op == VOLUME_OP_SELECT_ADD){
+		if(inside) newFlags = newFlags | FLAGS_SELECTED;
+	}else if(op == VOLUME_OP_SELECT_REMOVE){
+		if(inside) newFlags = newFlags & ~FLAGS_SELECTED;
+	}else if(op == VOLUME_OP_SELECT_REPLACE){
+		if(inside){
+			newFlags = newFlags | FLAGS_SELECTED;
+		}else{
+			newFlags = newFlags & ~FLAGS_SELECTED;
+		}
+	}else if(op == VOLUME_OP_DELETE){
+		if(inside){
+			newFlags = newFlags | FLAGS_DELETED;
+			newFlags = newFlags & ~FLAGS_SELECTED;
+			newFlags = newFlags & ~FLAGS_HIGHLIGHTED;
+
+			if(changedmask){
+				setBit(changedmask, index);
+			}
+		}
+	}
+
+	if(newFlags != flags){
+		model.flags[index] = newFlags;
+	}
+}

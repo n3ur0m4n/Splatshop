@@ -70,6 +70,8 @@ struct GizmoAction : public InputAction{
 
 	int32_t numSelectedSplats = 0;
 
+	bool allowsNavigation(){ return true; }
+
 	void beginUndoable(){
 		auto editor = SplatEditor::instance;
 		auto node = editor->getSelectedNode();
@@ -188,7 +190,7 @@ struct GizmoAction : public InputAction{
 		bool leftPressed = wasLeftDown == false && isLeftDown == true;
 		wasLeftDown = isLeftDown;
 
-		if(leftPressed){
+		if(leftPressed && ImGuizmo::IsOver()){
 			beginUndoable();
 			cummulative = mat4(1.0f);
 		}else if(leftReleased){

@@ -118,3 +118,79 @@ void kernel_applyEyeDomeLighting(CommonLaunchArgs args, RenderTarget target){
 
 
 }
+
+// Draws selection volumes as translucent overlays on top of the final image.
+// Faces in front of the scene surface are blended with <fillAlpha>, hidden faces faintly.
+extern "C" __global__
+void kernel_drawVolumes(CommonLaunchArgs args, RenderTarget target, mat4 invView, VolumeGPU* volumes, int numVolumes){
+
+	auto grid = cg::this_grid();
+
+	int pixelID = grid.thread_rank();
+
+	if(pixelID >= target.width * target.height) return;
+
+	int px = pixelID % target.width;
+	int py = pixelID / target.width;
+
+	uint64_t pixel = target.framebuffer[pixelID];
+	float surfaceDepth = __int_as_float(uint32_t(pixel >> 32));
+	if(!(surfaceDepth > 0.0f && surfaceDepth < 1e30f)) surfaceDepth = 1e30f;
+
+	// Same (unconventional) projection as in kernel_update_hovered: ndc.w is the linear depth.
+	// With view-space direction z = -1, the ray parameter t equals the linear depth.
+	vec3 dir_view = {
+		(2.0f * (float(px) + 0.5f) / target.width - 1.0f) / target.proj[0][0],
+		(2.0f * (float(py) + 0.5f) / target.height - 1.0f) / target.proj[1][1],
+		-1.0f
+	};
+	vec3 origin = vec3(invView * vec4(0.0f, 0.0f, 0.0f, 1.0f));
+	vec3 dir = vec3(invView * vec4(dir_view, 0.0f));
+
+	uint32_t C = pixel & 0xffffffff;
+	vec3 color = {
+		float((C >>  0) & 0xff),
+		float((C >>  8) & 0xff),
+		float((C >> 16) & 0xff),
+	};
+
+	bool changed = false;
+
+	for(int i = 0; i < numVolumes; i++){
+		VolumeGPU volume = volumes[i];
+
+		vec3 o = vec3(volume.worldToVolume * vec4(origin, 1.0f));
+		vec3 d = vec3(volume.worldToVolume * vec4(dir, 0.0f));
+
+		float t0, t1;
+		if(!intersectUnitVolume(volume.shape, o, d, t0, t1)) continue;
+
+		vec3 vcolor = {
+			float((volume.color >>  0) & 0xff),
+			float((volume.color >>  8) & 0xff),
+			float((volume.color >> 16) & 0xff),
+		};
+
+		float hiddenAlpha = volume.fillAlpha * 0.3f;
+
+		// back face first, then front face
+		float faces[2] = {t1, t0};
+		for(int j = 0; j < 2; j++){
+			float t = faces[j];
+			if(t <= 0.0f) continue;
+
+			float a = (t < surfaceDepth) ? volume.fillAlpha : hiddenAlpha;
+			color = (1.0f - a) * color + a * vcolor;
+			changed = true;
+		}
+	}
+
+	if(changed){
+		uint32_t R = clamp(color.x, 0.0f, 255.0f);
+		uint32_t G = clamp(color.y, 0.0f, 255.0f);
+		uint32_t B = clamp(color.z, 0.0f, 255.0f);
+		uint32_t newColor = R | (G << 8) | (B << 16) | (C & 0xff000000);
+
+		target.framebuffer[pixelID] = (pixel & 0xffffffff'00000000) | uint64_t(newColor);
+	}
+}

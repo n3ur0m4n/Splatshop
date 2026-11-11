@@ -64,6 +64,10 @@ void SplatEditor::makeEditingGUI() {
 
 		// makeAdjustGUI();
 		makeAssetGUI();
+
+		ImGui::Separator();
+
+		VolumeSelectAction::makePanel();
 	}
 	
 	ImGui::End();

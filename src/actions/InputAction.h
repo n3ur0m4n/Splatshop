@@ -41,6 +41,15 @@ struct InputAction{
 	virtual void update(){};
 	virtual void stop(){};
 	virtual void makeToolbarSettings(){};
+
+	// If true, the camera can still be navigated while this action is active (left: orbit, right: pan, wheel: zoom),
+	// unless the mouse is interacting with a gizmo. A right click without moving, or Esc, ends the action.
+	virtual bool allowsNavigation(){ return false; };
+	// If true, a left press is consumed by the action (no camera orbit while the button is held).
+	virtual bool capturesLeftPress(){ return false; };
+
+	// An action can request a switch to another action. Applied by the input handling after update().
+	shared_ptr<InputAction> nextAction = nullptr;
 };
 
 
